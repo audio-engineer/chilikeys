@@ -11,9 +11,38 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-      - name: Package
-        run: pkgbuild --root src --identifier com.chilikeys.ChiliKeys --version ${{ github.ref_name }} --install-location ~ ChiliKeys-${{ github.ref_name }}.pkg
+      - name: Install create-dmg
+        run: brew install create-dmg
+      - name: Create Layouts Archive
+        run: |
+          cd layouts
+          zip -r ../ChiliKeys-${{ github.ref_name }}.zip .
+          ln -s ~/Library/Keyboard\ Layouts 'Keyboard Layouts'
+      - name: Create DMG
+        run: |
+          create-dmg \
+          --volname 'ChiliKeys Installer' \
+          --volicon 'layouts/ChiliKeys.icns' \
+          --window-size 500 300 \
+          'ChiliKeys Installer ${{ github.ref_name }}.dmg' \
+          layouts/
+      - name: Calculate SHA
+        id: calculate_sha
+        run: |
+          file=ChiliKeys-${{ github.ref_name }}.zip
+          hash=$(shasum -a 256 "$file" | cut -d ' ' -f 1)
+
+          echo "sha256=$hash" >> $GITHUB_OUTPUT
+      - name: Update Cask File
+        run: |
+          sed -i 's/sha256 ""/sha256 "${{ steps.calculate_sha.outputs.sha256 }}"/g' chilikeys.rb
+      - uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: Update Cask file for ${{ github.ref_name}}
+          branch: main
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
-          files: ChiliKeys-${{ github.ref_name }}.pkg
+          files: |
+            ChiliKeys-${{ github.ref_name }}.zip
+            ChiliKeys Installer ${{ github.ref_name }}.dmg
